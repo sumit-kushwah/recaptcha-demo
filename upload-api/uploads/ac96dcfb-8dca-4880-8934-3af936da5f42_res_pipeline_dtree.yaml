@@ -1,0 +1,320 @@
+# PIPELINE DEFINITION
+# Name: restaurant-model-pipeline
+# Inputs:
+#    experiment_name: str [Default: 'Restaurant-Turnover']
+#    input_file: str [Default: '/data/raw-data-restaurant.csv']
+#    mlflow_uri: str [Default: 'http://68.183.90.6:32699/']
+# Outputs:
+#    data-validation-output: system.Metrics
+components:
+  comp-data-preparation:
+    executorLabel: exec-data-preparation
+    inputDefinitions:
+      artifacts:
+        input:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+        not_used:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+      parameters:
+        mlflow_exp:
+          parameterType: STRING
+        mlflow_uri:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        output:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+  comp-data-preprocessing:
+    executorLabel: exec-data-preprocessing
+    inputDefinitions:
+      parameters:
+        input_file:
+          parameterType: STRING
+        mlflow_exp:
+          parameterType: STRING
+        mlflow_uri:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        out_data:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+  comp-data-validation:
+    executorLabel: exec-data-validation
+    inputDefinitions:
+      artifacts:
+        input:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+      parameters:
+        mlflow_exp:
+          parameterType: STRING
+        mlflow_uri:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        output:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+  comp-model-eval:
+    executorLabel: exec-model-eval
+    inputDefinitions:
+      artifacts:
+        input:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+        model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+      parameters:
+        mlflow_exp:
+          parameterType: STRING
+        mlflow_uri:
+          parameterType: STRING
+  comp-model-train:
+    executorLabel: exec-model-train
+    inputDefinitions:
+      artifacts:
+        input:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+      parameters:
+        mlflow_exp:
+          parameterType: STRING
+        mlflow_uri:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-data-preparation:
+      container:
+        args:
+        - --mlflow_uri
+        - '{{$.inputs.parameters[''mlflow_uri'']}}'
+        - --mlflow_exp
+        - '{{$.inputs.parameters[''mlflow_exp'']}}'
+        - --input
+        - '{{$.inputs.artifacts[''input''].path}}'
+        - --output
+        - '{{$.outputs.artifacts[''output''].path}}'
+        command:
+        - python3
+        - data_preparation.py
+        image: sumitkushwah/restaurant-dtree:latest
+    exec-data-preprocessing:
+      container:
+        args:
+        - --mlflow_uri
+        - '{{$.inputs.parameters[''mlflow_uri'']}}'
+        - --mlflow_exp
+        - '{{$.inputs.parameters[''mlflow_exp'']}}'
+        - --input
+        - '{{$.inputs.parameters[''input_file'']}}'
+        - --output
+        - '{{$.outputs.artifacts[''out_data''].path}}'
+        command:
+        - python3
+        - data-pre-processing.py
+        image: sumitkushwah/restaurant-dtree:latest
+    exec-data-validation:
+      container:
+        args:
+        - --mlflow_uri
+        - '{{$.inputs.parameters[''mlflow_uri'']}}'
+        - --mlflow_exp
+        - '{{$.inputs.parameters[''mlflow_exp'']}}'
+        - --input
+        - '{{$.inputs.artifacts[''input''].path}}'
+        command:
+        - python3
+        - data-validation.py
+        image: sumitkushwah/restaurant-dtree:latest
+    exec-model-eval:
+      container:
+        args:
+        - --mlflow_uri
+        - '{{$.inputs.parameters[''mlflow_uri'']}}'
+        - --mlflow_exp
+        - '{{$.inputs.parameters[''mlflow_exp'']}}'
+        - --x-test-path
+        - '{{$.inputs.artifacts[''input''].path}}'
+        - --y-test-path
+        - '{{$.inputs.artifacts[''input''].path}}'
+        - --model-file-path
+        - '{{$.inputs.artifacts[''model''].path}}'
+        command:
+        - python3
+        - model_evaluation.py
+        image: sumitkushwah/restaurant-dtree:latest
+    exec-model-train:
+      container:
+        args:
+        - --mlflow_uri
+        - '{{$.inputs.parameters[''mlflow_uri'']}}'
+        - --mlflow_exp
+        - '{{$.inputs.parameters[''mlflow_exp'']}}'
+        - --x-train-path
+        - '{{$.inputs.artifacts[''input''].path}}'
+        - --y-train-path
+        - '{{$.inputs.artifacts[''input''].path}}'
+        - --model-out-dir
+        - '{{$.outputs.artifacts[''model''].path}}'
+        command:
+        - python3
+        - nn_train.py
+        image: sumitkushwah/restaurant-dtree:latest
+pipelineInfo:
+  name: restaurant-model-pipeline
+root:
+  dag:
+    outputs:
+      artifacts:
+        data-validation-output:
+          artifactSelectors:
+          - outputArtifactKey: output
+            producerSubtask: data-validation
+    tasks:
+      data-preparation:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-data-preparation
+        dependentTasks:
+        - data-preprocessing
+        - data-validation
+        inputs:
+          artifacts:
+            input:
+              taskOutputArtifact:
+                outputArtifactKey: out_data
+                producerTask: data-preprocessing
+            not_used:
+              taskOutputArtifact:
+                outputArtifactKey: output
+                producerTask: data-validation
+          parameters:
+            mlflow_exp:
+              componentInputParameter: experiment_name
+            mlflow_uri:
+              componentInputParameter: mlflow_uri
+        taskInfo:
+          name: data-preparation
+      data-preprocessing:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-data-preprocessing
+        inputs:
+          parameters:
+            input_file:
+              componentInputParameter: input_file
+            mlflow_exp:
+              componentInputParameter: experiment_name
+            mlflow_uri:
+              componentInputParameter: mlflow_uri
+        taskInfo:
+          name: data-preprocessing
+      data-validation:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-data-validation
+        dependentTasks:
+        - data-preprocessing
+        inputs:
+          artifacts:
+            input:
+              taskOutputArtifact:
+                outputArtifactKey: out_data
+                producerTask: data-preprocessing
+          parameters:
+            mlflow_exp:
+              componentInputParameter: experiment_name
+            mlflow_uri:
+              componentInputParameter: mlflow_uri
+        taskInfo:
+          name: data-validation
+      model-eval:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-model-eval
+        dependentTasks:
+        - data-preparation
+        - model-train
+        inputs:
+          artifacts:
+            input:
+              taskOutputArtifact:
+                outputArtifactKey: output
+                producerTask: data-preparation
+            model:
+              taskOutputArtifact:
+                outputArtifactKey: model
+                producerTask: model-train
+          parameters:
+            mlflow_exp:
+              componentInputParameter: experiment_name
+            mlflow_uri:
+              componentInputParameter: mlflow_uri
+        taskInfo:
+          name: model-eval
+      model-train:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-model-train
+        dependentTasks:
+        - data-preparation
+        inputs:
+          artifacts:
+            input:
+              taskOutputArtifact:
+                outputArtifactKey: output
+                producerTask: data-preparation
+          parameters:
+            mlflow_exp:
+              componentInputParameter: experiment_name
+            mlflow_uri:
+              componentInputParameter: mlflow_uri
+        taskInfo:
+          name: model-train
+  inputDefinitions:
+    parameters:
+      experiment_name:
+        defaultValue: Restaurant-Turnover
+        isOptional: true
+        parameterType: STRING
+      input_file:
+        defaultValue: /data/raw-data-restaurant.csv
+        isOptional: true
+        parameterType: STRING
+      mlflow_uri:
+        defaultValue: http://68.183.90.6:32699/
+        isOptional: true
+        parameterType: STRING
+  outputDefinitions:
+    artifacts:
+      data-validation-output:
+        artifactType:
+          schemaTitle: system.Metrics
+          schemaVersion: 0.0.1
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.0.1
