@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/joho/godotenv"
 )
 
 func verifyRecaptcha(token string, captchaType string, remoteIp string) bool {
@@ -100,7 +98,7 @@ var fileUpload = func(c *gin.Context) {
 	defer file.Close()
 	// unique id generator
 	id := uuid.New().String() + "_"
-	fileName := "uploads/" + id + header.Filename
+	fileName := "/data/" + id + header.Filename
 	out, err := os.Create(fileName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -129,14 +127,14 @@ var fileUpload = func(c *gin.Context) {
 		"message": "File uploaded successfully",
 		"error":   nil,
 		"data": map[string]string{
-			"file_url": "http://" + c.Request.Host + "/" + fileName,
+			"file_url": "http://" + c.Request.Host + fileName,
 		},
 	})
 }
 
 var cleanUp = func(c *gin.Context) {
 	// clean up the uploaded file
-	dir := "./uploads"
+	dir := "/data"
 	d, err := os.Open(dir)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -197,7 +195,7 @@ func NewRouter() *gin.Engine {
 		}
 		c.Next()
 	})
-	router.Static("/uploads", "./uploads")
+	router.Static("/data", "/data")
 	api := router.Group("/api")
 	api.GET("", healthCheck)
 	api.GET("/", healthCheck)
@@ -207,13 +205,13 @@ func NewRouter() *gin.Engine {
 }
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
-
 	gin.SetMode(gin.ReleaseMode)
 	router := NewRouter()
-	fmt.Println("Starting server on port 3001")
-	router.Run(":3001")
+	// get env variable for port with default value
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "3000"
+	}
+	fmt.Println("Starting server on port " + port)
+	router.Run(":" + port)
 }

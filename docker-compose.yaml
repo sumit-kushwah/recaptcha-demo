@@ -1,0 +1,23 @@
+---
+version: "3.4"
+services:
+  app-backend:
+    image: upload-file-backend:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - INVISIBLE_SECRET_KEY=${INVISIBLE_SECRET_KEY}
+      - CHECKBOX_SECRET_KEY=${CHECKBOX_SECRET_KEY}
+      - V3_SECRET_KEY=${V3_SECRET_KEY}
+    volumes:
+      - uploads:/data
+  app-frontend:
+    image: upload-file-frontend:latest
+    ports:
+      - "4000:4000"
+    environment:
+    - UPLOAD_API_URL='http://app_backend:3000'
+    depends_on:
+      - app-backend
+volumes:
+  uploads:

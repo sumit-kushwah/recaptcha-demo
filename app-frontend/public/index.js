@@ -24,7 +24,7 @@ document.getElementById('myForm').addEventListener('submit', function (event) {
 
 function callUploadFileAPI(formData, captchaType) {
   formData.append('captcha_type', captchaType);
-  fetch('http://localhost:3001/api/upload', {
+  fetch('http://localhost:3000/api/upload', {
     method: 'POST',
     body: formData
   })
@@ -39,7 +39,7 @@ function callUploadFileAPI(formData, captchaType) {
 };
 
 function cleanupFunction() {
-  fetch('http://localhost:3001/api/cleanup', {
+  fetch('http://localhost:3000/api/cleanup', {
     method: 'DELETE',
   })
     .then(response => response.json())
